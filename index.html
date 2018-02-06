@@ -69,7 +69,10 @@
 </script></section>
 
 <section data-markdown><script type="text/template">
-### No HL || BD
+
+### Health IT
+---
+#### Not HL || BD
 ---
 but informational complex domain
 </script></section>
@@ -139,13 +142,15 @@ aka product catalog
 * intensive vs extensive
 * semantic web
 * jsonb is a new EAV
+* jsonb is open
 </script></section>
 
 <section data-markdown><script type="text/template">
 ### What do we pay?
 ---
-* 20% for access (vs column access)
-* 1-3 times size for storage  (zson, jsonbc, compression)
+* 20% for access  (vs column access)
+* 1-3 times size  (zson, jsonbc, compression)
+* no statistic
 * less concurrency
 * more vacuum
 ----
@@ -156,15 +161,15 @@ Everything is trade-off
 ### No-Schema
 ---
 * constraint jsquery 
-* service layer validation (json-schema)
+* app layer validation (json-schema)
 * attribute based schema (aka rdf/owl)
-* everything is trade-off
 ----
+> everything is trade-off
 > do not let schema dominate semantic
 </script></section>
 
 <section data-markdown><script type="text/template">
-### Our schema
+### Our db schema
 ---
 
 ```sql
@@ -176,6 +181,7 @@ create table patient (
 ```
 ---
 + json-schema generated from <rdf> schema
++ could be compiled into jsquery
 </script></section>
 
 
@@ -187,6 +193,8 @@ SELECT  * FROM patient
  WHERE resource->>'gender' = 'male'
    AND resource#>>'{address,city}' = 'New York'
 ```
+---
+we pay x10% for this
 </script></section>
 
 <section data-markdown><script type="text/template">
@@ -205,7 +213,7 @@ USING gin ((resource#>>'{name,given}') gin_trgm_ops,
 </script></section>
 
 <section data-markdown><script type="text/template">
-### Update it
+### Change it (||, -, #-)
 ---
 ```sql
 update interboxmessage
@@ -222,18 +230,21 @@ set resource = resource ||
  )
 where resource#>>'{type}' = 'HL7v2';
 ```
+----
+waiting for ```resource['key']['key'] = val```
 </script></section>
 
 <section data-markdown><script type="text/template">
-### Advanced JSON update & plv8
+### Advanced JSON manipulation & plv8
 ---
 ```sql
-CREATE FUNCTION plv8_test(keys text[], obj jsonb) RETURNS json AS $$
-    var o = {};
-    for(var i=0; i<keys.length; i++){
-       //.....
-    }
-    return {result: ....}
+CREATE FUNCTION plv8_test(keys text[], obj jsonb)
+RETURNS json AS $$
+  var o = {};
+  for(var i=0; i<keys.length; i++){
+      //.....
+  }
+  return {result: ....}
 $$ LANGUAGE plv8 IMMUTABLE STRICT;
 
 ```
@@ -269,6 +280,16 @@ https://github.com/postgrespro/jsquery/
 </script></section>
 
 <section data-markdown><script type="text/template">
+###  Jsquery Idx
+---
+* optclasses
+  * jsonb_path_value_ops
+  * jsonb_value_path_ops
+* hints 'x = 1 AND y /*-- index */ > 0' 
+---
+one index - many queries
+</script></section>
+<section data-markdown><script type="text/template">
 ###  Jsquery for schema
 ---
 ```sql
@@ -287,15 +308,14 @@ https://github.com/postgrespro/jsquery/
 <section data-markdown><script type="text/template">
 ###  Jsquery limitations
 ---
-* json datatypes (string, bool, numeric)
+* few json datatypes (string, bool, numeric)
 * operators
 </script></section>
 
 <section data-markdown><script type="text/template">
 ###  Jsquery filtering????
 ---
-```
-```
+Feodor i did not find :(
 </script></section>
 
 <section data-markdown><script type="text/template">
@@ -307,7 +327,7 @@ SELECT knife_extract_max_timestamptz(
     {"a":{"b": [{"s": "?", "c": "1980-02-05"},
                 {"s": "??", "c": "1979-02-05"}]}}
   $JSONB$,
-  '[["a","b",{"s": "?"}, "c"]]'
+  '[["a","b",{"s": "?"}, "c"]]'::jsonb
 );
 -------------------------------------
 -- Tue Feb 05 23:59:59.999999 1980 PST
@@ -315,7 +335,7 @@ SELECT knife_extract_max_timestamptz(
 </script></section>
 
 <section data-markdown><script type="text/template">
-###  json-path SQL 2017
+### SQL/JSON Standard 2017
 </script></section>
 
 <section data-markdown><script type="text/template">
@@ -361,6 +381,8 @@ WITH parents as (....),
 </script></section>
 
 <section data-markdown><script type="text/template">
+### Better JSON?
+---
 ### PGDN aka EDN
 ---
 
@@ -392,6 +414,8 @@ WITH parents as (....),
 <section data-markdown><script type="text/template">
 ### NOORM
 ---
+* SQL is more declarative
+* lack of composition
 </script></section>
 
 <section data-markdown><script type="text/template">
