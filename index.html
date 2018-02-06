@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="en">
+
+	<head>
+		<meta charset="utf-8">
+
+		<title>pgconf18 niquola</title>
+
+		<meta name="description" content="A framework for easily creating beautiful presentations using HTML">
+		<meta name="author" content="Hakim El Hattab">
+
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<link rel="stylesheet" href="css/reveal.css">
+		<!-- <link rel="stylesheet" href="css/theme/black.css" id="theme"> -->
+		<link rel="stylesheet" href="css/theme/white.css" id="theme">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+    <style>
+     .reveal section img { background: white; }
+      </style>
+
+		<!--[if lt IE 9]>
+		<script src="lib/js/html5shiv.js"></script>
+		<![endif]-->
+	</head>
+
+	<body>
+
+		<div class="reveal">
+			<div class="slides">
+<section data-markdown>
+  <script type="text/template">
+    ### data(base) driven development 
+
+    ----
+
+    pgconf 2018 by @niquola
+  </script>
+</section>
+
+<section>
+  <h3>Николай Рыжиков</h3>
+  <hr/>
+  <p>CTO of health-samurai.io  <a href="http://github.com/niquola"> @niquola </a> </p>
+</section>
+
+<section data-markdown><script type="text/template">
+### Health IT > 10 years
+---
+* EHR for hospitals
+* Care coordination & telemedicine systems
+* Government Registries
+* BaaS based on FHIR
+
+</script></section>
+
+<section data-markdown><script type="text/template">
+### No HL || BD
+---
+but informational complex domain
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Complex domain?
+-----
+* more then 300 entities
+* more then 2K tables
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Complex domain?
+-----
+![](reslist.png)
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Complex domain?
+-----
+![](res.png)
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Complex domain?
+-----
+![](tp.png)
+</script></section>
+
+<section data-markdown><script type="text/template">
+### DDD Aggregate
+-----
+* cognitive load
+* expensive joins
+---
+json(b) as solution
+</script></section>
+
+<section data-markdown><script type="text/template">
+### JSON(B) technical perspective
+-----
+* joins are expensive
+* de-normalization on steroids
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Variability / Polymorphic
+---
+![](var.png)
+---
+
+aka product catalog
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Variability / Polymorphic
+---
+* tables inheritance
+* nullable columns
+* jsonb !
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Open Systems & Extensibility
+---
+* integrations
+* intensive vs extensive
+* semantic web
+* jsonb is a new EAV
+</script></section>
+
+<section data-markdown><script type="text/template">
+### What do we pay?
+---
+* 20% for access (vs column access)
+* 1-3 times size for storage  (zson, jsonbc, compression)
+* less concurrency
+* more vacuum
+----
+Everything is trade-off
+</script></section>
+
+<section data-markdown><script type="text/template">
+### No-Schema
+---
+* constraint jsquery 
+* service layer validation (json-schema)
+* attribute based schema (aka rdf/owl)
+* everything is trade-off
+----
+> do not let schema dominate semantic
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Our schema
+---
+
+```sql
+create table patient (
+  id text primary key,
+  ts timestamp,
+  resource jsonb
+);
+```
+---
++ json-schema generated from <rdf> schema
+</script></section>
+
+
+<section data-markdown><script type="text/template">
+### How to search?
+---
+```sql
+SELECT  * FROM patient
+ WHERE resource->>'gender' = 'male'
+   AND resource#>>'{address,city}' = 'New York'
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Speed it up!
+---
+```sql
+CREATE EXTENSION pg_trgm;
+CREATE INDEX patient_name_idx
+ON patient
+USING gin ((resource#>>'{name,given}') gin_trgm_ops,
+           (resource#>>'{name,family}') gin_trgm_ops);
+--
+... WHERE resource#>>'{name,given}' ilike 'davi%' ...
+
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Update it
+---
+```sql
+update interboxmessage
+set resource = resource ||
+ jsonb_build_object(
+    'status', 'pending',
+    'details',
+    jsonb_build_object(
+      'encounter-date',
+      hl7_date_to_iso(
+        split_part(split_part(resource->>'message', 'FT1|', 2) , '|', 4)
+      )
+    ) || resource->'details'
+ )
+where resource#>>'{type}' = 'HL7v2';
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Advanced JSON update & plv8
+---
+```sql
+CREATE FUNCTION plv8_test(keys text[], obj jsonb) RETURNS json AS $$
+    var o = {};
+    for(var i=0; i<keys.length; i++){
+       //.....
+    }
+    return {result: ....}
+$$ LANGUAGE plv8 IMMUTABLE STRICT;
+
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+### More sophisticated search
+---
+```js
+{
+  //...
+  contacts:  [
+    {system: "phone", value: "+178...."},
+    {system: "email", value: "niq...."},
+  ]
+  //...
+}
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+###  Jsquery
+---
+```sql
+WHERE 
+ resource @@ $JSQ$
+    contacts.#. ( system = "phone" and value = "+14...") '
+ $JSQ$
+
+```
+--------
+https://github.com/postgrespro/jsquery/
+</script></section>
+
+<section data-markdown><script type="text/template">
+###  Jsquery for schema
+---
+```sql
+CREATE TABLE js (
+    id serial,
+    data jsonb,
+    CHECK (data @@ '
+        name IS STRING AND
+        similar_ids.#: IS NUMERIC AND
+        points.#:(x IS NUMERIC AND y IS NUMERIC)'::jsquery));
+```
+--------
+https://github.com/postgrespro/jsquery/
+</script></section>
+
+<section data-markdown><script type="text/template">
+###  Jsquery limitations
+---
+* json datatypes (string, bool, numeric)
+* operators
+</script></section>
+
+<section data-markdown><script type="text/template">
+###  Jsquery filtering????
+---
+```
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+###  json-knife
+---
+```
+SELECT knife_extract_max_timestamptz(
+  $JSONB$
+    {"a":{"b": [{"s": "?", "c": "1980-02-05"},
+                {"s": "??", "c": "1979-02-05"}]}}
+  $JSONB$,
+  '[["a","b",{"s": "?"}, "c"]]'
+);
+-------------------------------------
+-- Tue Feb 05 23:59:59.999999 1980 PST
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+###  json-path SQL 2017
+</script></section>
+
+<section data-markdown><script type="text/template">
+###  jsonb_agg
+---
+```sql
+jsonb_build_object(
+  'query1', (SELECT json_agg(row_to_json(p.*)) FROM patient),
+  'query2', .........
+)
+
+```
+</script></section>
+
+
+<section data-markdown><script type="text/template">
+### jsonb_object_agg
+---
+```sql
+with data(color_id, language, name) as (
+values (1, 'de', 'blau'), (1, 'en', 'blue'), ...)
+select color_id, jsonb_object_agg(language, name)
+from data group by 1;
+
+ color_id |              jsonb_object_agg              
+----------+--------------------------------------------
+        1 | {"de": "blau", "en": "blue", "fr": "bleu"}
+(1 row)
+
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+### GraphSQL (GraphQL)
+---
+```sql
+WITH parents as (....),
+  children as (.......),
+  children as (.......)
+  SELECT json_agg/row_to_json/build_json_object
+    FROM parents
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+### PGDN aka EDN
+---
+
+```clj
+{:name "John"
+ :lastname "Black"
+ :roles #{"user", "admin"}
+ :last-visited #inst "2013-04-12T20:20:50.52Z"
+ :id #uuid "b371b600-b175-11e2-9e96-0800200c9a66"}
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+###  Functional-relational programming
+----
+## [Out of the tar pit](http://shaffner.us/cs/papers/tarpit.pdf)
+</script></section>
+
+<section data-markdown><script type="text/template">
+### My app
+---
+```
+
+ Request => Transform => DB => Query => Response
+
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+### NOORM
+---
+</script></section>
+
+<section data-markdown><script type="text/template">
+### HoneySQL
+---
+```
+{:select [:f.* :b.baz :c.quux [:b.bla "bla-bla"]
+             (sql/call :now) (sql/raw "@x := 10")]
+    :modifiers [:distinct]
+    :from [[:foo :f] [:baz :b]]
+    :join [:draq [:= :f.b :draq.x]]
+    :left-join [[:clod :c] [:= :f.a :c.d]]
+    :right-join [:bock [:= :bock.z :c.e]]
+    :where [:or
+             [:and [:= :f.a "bort"] [:not= :b.baz (sql/param :param1)]]
+             [:< 1 2 3]
+             [:in :f.e [1 (sql/param :param2) 3]]
+             [:between :f.e 10 20]]
+    :group-by [:f.a]
+    :having [:< 0 :f.e]
+    :order-by [[:b.baz :desc] :c.quux [:f.a :nulls-first]]
+    :limit 50
+    :offset 10}
+```
+---
+data notation for sql / composability
+</script></section>
+
+<section data-markdown><script type="text/template">
+###  Reactive Systems / UI
+----
+
+### Logical Replication
+</script></section>
+
+<section data-markdown><script type="text/template">
+### wal2json => kafka
+---
+```json
+...
+{
+  "kind": "insert",
+  "schema": "public",
+  "table": "table_with_pk",
+  "columnnames": ["a", "b", "c"],
+  "columntypes": ["int4", "varchar", "timestamp"],
+  "columnvalues": [1, "Backup and Restore", "2015-08-27 16:46:35.818038"]
+}
+,{
+  "kind": "insert",
+  "schema": "public",
+  "table": "table_with_pk",
+  "columnnames": ["a", "b", "c"],
+  "columntypes": ["int4", "varchar", "timestamp"],
+  "columnvalues": [2, "Tuning", "2015-08-27 16:46:35.818038"]
+}
+...
+```
+</script></section>
+
+<section data-markdown><script type="text/template">
+### Async/JDBC-less
+### jvm pg adapter 
+----
+
+* based on Netty
+* 1K SLOC
+* explicit prepared query 
+* only text
+</script></section>
+
+</div></div>
+
+<section data-markdown><script type="text/template">
+### Thx
+----
+#### Questions?
+</script></section>
+
+</div></div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+		<script>
+
+			// More info https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				history: true,
+				center: true,
+
+				transition: 'slide', // none/fade/slide/convex/concave/zoom
+
+				// More info https://github.com/hakimel/reveal.js#dependencies
+				dependencies: [
+					{ src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+					{ src: 'plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+					{ src: 'plugin/zoom-js/zoom.js', async: true },
+					{ src: 'plugin/notes/notes.js', async: true }
+				]
+			});
+
+		</script>
+
+	</body>
+</html>
